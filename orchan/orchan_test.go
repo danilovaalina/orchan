@@ -1,9 +1,16 @@
 package orchan
 
 import (
+	"runtime"
 	"testing"
 	"time"
+
+	"go.uber.org/goleak"
 )
+
+func TestMain(m *testing.M) {
+	goleak.VerifyTestMain(m)
+}
 
 // Or с одним уже закрытым каналом должен немедленно закрыть выходной канал.
 func TestOr_Single(t *testing.T) {
@@ -85,5 +92,36 @@ func TestOr_DuplicateChannels(t *testing.T) {
 		// Канал закрылся без паники
 	case <-time.After(100 * time.Millisecond):
 		t.Fatal("Or did not close the output channel within timeout")
+	}
+}
+
+// Or не должен оставлять висящих горутин после завершения.
+func TestOr_NoGoroutineLeak(t *testing.T) {
+	t.Parallel()
+
+	neverClosing := make(chan interface{})
+
+	fast := func() <-chan interface{} {
+		c := make(chan interface{})
+		go func() {
+			defer close(c)
+			time.Sleep(5 * time.Millisecond)
+		}()
+		return c
+	}
+
+	before := runtime.NumGoroutine()
+
+	// Вызываем Or с одним быстрым и двумя "вечными" каналами
+	result := Or(fast(), neverClosing, neverClosing)
+
+	// Ждём завершения
+	<-result
+
+	runtime.GC()
+	after := runtime.NumGoroutine()
+
+	if after > before {
+		t.Errorf("goroutine leak detected: %d before, %d after", before, after)
 	}
 }

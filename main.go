@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"time"
 
-	"orchan/orchan"
+	"github.com/danilovaalina/orchan/orchan"
 )
 
 func main() {

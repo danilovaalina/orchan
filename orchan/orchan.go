@@ -1,32 +1,35 @@
 package orchan
 
-import "sync"
-
 // Or combines one or more done channels into a single done channel.
-// The returned channel is closed as soon as any of the input channels is closed
-// or receives a value.
+// The returned channel is closed as soon as any of the input channels is closed.
 func Or(channels ...<-chan interface{}) <-chan interface{} {
-	out := make(chan interface{})
+	orDone := make(chan interface{})
+
 	if len(channels) == 0 {
-		close(out)
-		return out
+		close(orDone)
+		return orDone
 	}
 
-	var once sync.Once
-	closeOut := func() {
-		once.Do(func() {
-			close(out)
-		})
+	if len(channels) == 1 {
+		return channels[0]
 	}
 
-	for _, c := range channels {
-		go func() {
+	go func() {
+		defer close(orDone)
+
+		if len(channels) == 2 {
 			select {
-			case <-c:
-				closeOut()
+			case <-channels[0]:
+			case <-channels[1]:
 			}
-		}()
-	}
+			return
+		}
 
-	return out
+		select {
+		case <-channels[0]:
+		case <-channels[1]:
+		case <-Or(append(channels[2:], orDone)...):
+		}
+	}()
+	return orDone
 }
