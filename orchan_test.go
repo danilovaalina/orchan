@@ -1,6 +1,7 @@
 package orchan
 
 import (
+	"fmt"
 	"runtime"
 	"testing"
 	"time"
@@ -123,5 +124,44 @@ func TestOr_NoGoroutineLeak(t *testing.T) {
 
 	if after > before {
 		t.Errorf("goroutine leak detected: %d before, %d after", before, after)
+	}
+}
+
+func BenchmarkOr(b *testing.B) {
+	// Создаем вспомогательную функцию для генерации каналов
+	makeChannels := func(n int) []<-chan interface{} {
+		chans := make([]<-chan interface{}, n)
+		for i := 0; i < n; i++ {
+			chans[i] = make(chan interface{})
+		}
+		return chans
+	}
+
+	// Тестируем на разном количестве каналов
+	benchmarks := []struct {
+		count int
+	}{
+		{count: 2},
+		{count: 10},
+		{count: 20},
+		{count: 50}, // На больших числах рекурсия будет заметнее
+	}
+
+	for _, bm := range benchmarks {
+		b.Run(fmt.Sprintf("Channels-%d", bm.count), func(b *testing.B) {
+			chans := makeChannels(bm.count)
+
+			// Нам нужно закрыть один из каналов, чтобы Or завершился
+			// Но так как мы в цикле b.N, нам нужно пересоздавать каналы
+			b.ResetTimer()
+			for i := 0; i < b.N; i++ {
+				// Используем горутину, чтобы закрыть последний канал
+				lastChan := make(chan interface{})
+				currentChans := append(chans[:bm.count-1], lastChan)
+
+				go close(lastChan)
+				<-Or(currentChans...)
+			}
+		})
 	}
 }

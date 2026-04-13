@@ -1,3 +1,4 @@
+// Package orchan provides utilities for working with channels.
 package orchan
 
 // Or combines one or more done channels into a single done channel.
